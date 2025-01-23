@@ -29,10 +29,11 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "commander": "^11.1.0",
     "axios": "^1.7.9",
+    "chalk": "^5.4.1",
+    "commander": "^11.1.0",
     "dotenv": "^16.4.7",
-    "chalk": "^5.4.1"
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

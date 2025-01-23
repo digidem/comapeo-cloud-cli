@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import JSZip from "jszip";
 import chalk from "chalk";
 import { validateEnv, getApiClient, handleError } from "./helpers.js";
 
@@ -39,16 +41,6 @@ interface ObservationOptions {
   };
 }
 
-interface AttachmentOptions {
-  projectId: string;
-  driveId: string;
-  type: "photo" | "audio";
-  name: string;
-  variant?: string;
-  serverUrl?: string;
-  serverToken?: string;
-}
-
 interface AlertOptions {
   projectId: string;
   startDate: string;
@@ -65,6 +57,46 @@ interface ServerInfoOptions {
   serverUrl?: string;
   serverToken?: string;
 }
+
+// Shared utility functions
+const getOutputFilename = (
+  name: string,
+  type: string,
+  providedOutput?: string,
+): string => {
+  const extension = type === "photo" ? ".jpg" : ".mp3";
+  return providedOutput || `${name}${extension}`;
+};
+
+const downloadAttachment = async (
+  projectId: string,
+  driveId: string,
+  type: string,
+  name: string,
+  variant: string,
+  serverUrl?: string,
+  serverToken?: string,
+): Promise<Buffer> => {
+  const response = await getApiClient({
+    serverUrl,
+    serverToken,
+  }).get(
+    `/projects/${projectId}/attachments/${driveId}/${type}/${name}${variant}`,
+    { responseType: "arraybuffer" },
+  );
+  return Buffer.from(response.data);
+};
+
+const getUrlComponents = (url: string) => {
+  const urlMatch = url.match(
+    /\/projects\/([^\/]+)\/attachments\/([^\/]+)\/([^\/]+)\/([^\/]+)$/,
+  );
+  if (!urlMatch) {
+    throw new Error("Invalid attachment URL format");
+  }
+  const [, projectId, driveId, type, name] = urlMatch;
+  return { projectId, driveId, type, name };
+};
 
 program
   .name("comapeo-cloud")
@@ -205,11 +237,11 @@ program
   .command("export-geojson")
   .description("Export project observations as GeoJSON")
   .requiredOption("-p, --project-id <id>", "Project public ID")
-  .requiredOption("-o, --output <path>", "Output file path")
+  .option("-o, --output <path>", "Output file path")
   .action(
     async (options: {
       projectId: string;
-      output: string;
+      output?: string;
       serverUrl?: string;
       serverToken?: string;
     }) => {
@@ -219,7 +251,12 @@ program
           createdAt: string;
           updatedAt: string;
           deleted: boolean;
-          attachments: unknown[];
+          attachments: Array<{
+            driveId: string;
+            type: string;
+            name: string;
+            url: string;
+          }>;
           tags: Record<string, unknown>;
           lat: number;
           lon: number;
@@ -231,41 +268,136 @@ program
             type: "Point";
             coordinates: [number, number];
           };
-          properties: Omit<ObservationData, "lat" | "lon"> & { docId: string };
+          id: string;
+          properties: {
+            categoryId?: string;
+            name?: string;
+            notes?: string;
+            $created: string;
+            $modified: string;
+            $version: string;
+            $photos: string[];
+          };
         }
 
+        console.log(chalk.blue("Fetching observations..."));
         const response = await getApiClient({
           serverUrl: options.serverUrl || program.opts().serverUrl,
           serverToken: options.serverToken || program.opts().serverToken,
         }).get<{ data: ObservationData[] }>(
           `/projects/${options.projectId}/observations`,
         );
+        console.log(
+          chalk.blue(`Found ${response.data.data.length} observations`),
+        );
+
+        // Create temporary directory for zip contents
+        console.log(chalk.blue("Creating temporary directory..."));
+        const tmpDir = "tmp_export";
+        await mkdir(tmpDir, { recursive: true });
+        await mkdir(`${tmpDir}/images`, { recursive: true });
 
         const geojson = {
           type: "FeatureCollection" as const,
-          features: response.data.data
-            // .filter((obs) => obs.lat !== 0 && obs.lon !== 0)
-            .map(
-              (obs): GeoJSONFeature => ({
+          features: await Promise.all(
+            response.data.data.map(async (obs): Promise<GeoJSONFeature> => {
+              // Download attachments
+              console.log(chalk.blue(`Processing observation ${obs.docId}...`));
+              const photoFiles = await Promise.all(
+                obs.attachments
+                  // .filter(att => att.type === "photo")
+                  .map(async (att) => {
+                    console.log("processing", att);
+                    const { projectId, driveId, type, name } = getUrlComponents(
+                      att.url,
+                    );
+                    const filename = getOutputFilename(name, type);
+                    try {
+                      console.log(
+                        chalk.blue(`Downloading photo ${filename}...`),
+                      );
+                      const photoData = await downloadAttachment(
+                        options.projectId,
+                        driveId,
+                        type,
+                        name,
+                        "",
+                        options.serverUrl || program.opts().serverUrl,
+                        options.serverToken || program.opts().serverToken,
+                      );
+                      await writeFile(
+                        `${tmpDir}/images/${filename}`,
+                        photoData,
+                      );
+                      console.log(
+                        chalk.green(`Successfully downloaded ${filename}`),
+                      );
+                      return filename;
+                    } catch (error) {
+                      console.error(
+                        chalk.red(`Failed to download attachment ${filename}`),
+                      );
+                      return null;
+                    }
+                  }),
+              );
+
+              return {
                 type: "Feature",
                 geometry: {
                   type: "Point",
                   coordinates: [obs.lon, obs.lat],
                 },
+                id: obs.docId,
                 properties: {
-                  docId: obs.docId,
-                  createdAt: obs.createdAt,
-                  updatedAt: obs.updatedAt,
-                  deleted: obs.deleted,
-                  attachments: obs.attachments,
-                  tags: obs.tags,
+                  $created: obs.createdAt,
+                  $modified: obs.updatedAt,
+                  $version: `${obs.docId}@1`,
+                  $photos: photoFiles.filter((f): f is string => f !== null),
                 },
-              }),
-            ),
+              };
+            }),
+          ),
         };
 
-        await writeFile(options.output, JSON.stringify(geojson, null, 2));
-        console.log(chalk.green(`GeoJSON exported to: ${options.output}`));
+        // Write GeoJSON file
+        console.log(chalk.blue("Writing GeoJSON file..."));
+        await writeFile(
+          `${tmpDir}/comapeo_data.geojson`,
+          JSON.stringify(geojson, null, 2),
+        );
+
+        // Create zip file
+        console.log(chalk.blue("Creating ZIP archive..."));
+        const outputPath = options.output || "comapeo_export.zip";
+        const zip = new JSZip();
+
+        // Add GeoJSON file
+        zip.file(
+          "comapeo_data.geojson",
+          await readFile(`${tmpDir}/comapeo_data.geojson`),
+        );
+
+        // Add images folder
+        const imageFiles = await readdir(`${tmpDir}/images`);
+        for (const file of imageFiles) {
+          zip.file(
+            `images/${file}`,
+            await readFile(`${tmpDir}/images/${file}`),
+          );
+        }
+
+        // Generate zip file
+        const zipContent = await zip.generateAsync({ type: "nodebuffer" });
+        await writeFile(outputPath, zipContent);
+
+        // Clean up temporary directory
+        console.log(chalk.blue("Cleaning up temporary files..."));
+        await rm(tmpDir, { recursive: true, force: true });
+
+        console.log(
+          chalk.green(`Export completed successfully: ${outputPath}`),
+        );
       } catch (error) {
         handleError(error);
       }
@@ -276,34 +408,44 @@ program
 program
   .command("get-attachment")
   .description("Get an attachment")
-  .requiredOption("-p, --project-id <id>", "Project public ID")
-  .requiredOption("--drive-id <id>", "Drive discovery ID")
-  .requiredOption("--type <type>", "Attachment type (photo or audio)")
-  .requiredOption("--name <name>", "Attachment name")
+  .requiredOption("-u, --url <url>", "Full attachment URL")
   .option(
     "--variant <variant>",
     "Variant (original, preview, or thumbnail for photos; original for audio)",
   )
-  .action(async (options: AttachmentOptions) => {
-    try {
-      const variant = options.variant ? `?variant=${options.variant}` : "";
-      const response = await getApiClient({
-        serverUrl: options.serverUrl || program.opts().serverUrl,
-        serverToken: options.serverToken || program.opts().serverToken,
-      }).get(
-        `/projects/${options.projectId}/attachments/${options.driveId}/${options.type}/${options.name}${variant}`,
-        { responseType: "arraybuffer" },
-      );
+  .option("-o, --output <filename>", "Output filename")
+  .action(
+    async (options: {
+      url: string;
+      variant?: string;
+      output?: string;
+      serverUrl?: string;
+      serverToken?: string;
+    }) => {
+      try {
+        const { projectId, driveId, type, name } = getUrlComponents(
+          options.url,
+        );
+        const variant = options.variant ? `?variant=${options.variant}` : "";
 
-      // Save the file with appropriate extension
-      const extension = options.type === "photo" ? ".jpg" : ".mp3";
-      const filename = `${options.name}${extension}`;
-      await writeFile(filename, Buffer.from(response.data));
-      console.log(chalk.green(`Attachment saved as: ${filename}`));
-    } catch (error) {
-      handleError(error);
-    }
-  });
+        const data = await downloadAttachment(
+          projectId,
+          driveId,
+          type,
+          name,
+          variant,
+          options.serverUrl || program.opts().serverUrl,
+          options.serverToken || program.opts().serverToken,
+        );
+
+        const filename = getOutputFilename(name, type, options.output);
+        await writeFile(filename, data);
+        console.log(chalk.green(`Attachment saved as: ${filename}`));
+      } catch (error) {
+        handleError(error);
+      }
+    },
+  );
 
 // Create Remote Alert Command
 program
