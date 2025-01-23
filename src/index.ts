@@ -200,6 +200,78 @@ program
     },
   );
 
+// Export GeoJSON Command
+program
+  .command("export-geojson")
+  .description("Export project observations as GeoJSON")
+  .requiredOption("-p, --project-id <id>", "Project public ID")
+  .requiredOption("-o, --output <path>", "Output file path")
+  .action(
+    async (options: {
+      projectId: string;
+      output: string;
+      serverUrl?: string;
+      serverToken?: string;
+    }) => {
+      try {
+        interface ObservationData {
+          docId: string;
+          createdAt: string;
+          updatedAt: string;
+          deleted: boolean;
+          attachments: unknown[];
+          tags: Record<string, unknown>;
+          lat: number;
+          lon: number;
+        }
+
+        interface GeoJSONFeature {
+          type: "Feature";
+          geometry: {
+            type: "Point";
+            coordinates: [number, number];
+          };
+          properties: Omit<ObservationData, "lat" | "lon"> & { docId: string };
+        }
+
+        const response = await getApiClient({
+          serverUrl: options.serverUrl || program.opts().serverUrl,
+          serverToken: options.serverToken || program.opts().serverToken,
+        }).get<{ data: ObservationData[] }>(
+          `/projects/${options.projectId}/observations`,
+        );
+
+        const geojson = {
+          type: "FeatureCollection" as const,
+          features: response.data.data
+            // .filter((obs) => obs.lat !== 0 && obs.lon !== 0)
+            .map(
+              (obs): GeoJSONFeature => ({
+                type: "Feature",
+                geometry: {
+                  type: "Point",
+                  coordinates: [obs.lon, obs.lat],
+                },
+                properties: {
+                  docId: obs.docId,
+                  createdAt: obs.createdAt,
+                  updatedAt: obs.updatedAt,
+                  deleted: obs.deleted,
+                  attachments: obs.attachments,
+                  tags: obs.tags,
+                },
+              }),
+            ),
+        };
+
+        await writeFile(options.output, JSON.stringify(geojson, null, 2));
+        console.log(chalk.green(`GeoJSON exported to: ${options.output}`));
+      } catch (error) {
+        handleError(error);
+      }
+    },
+  );
+
 // Get Attachment Command
 program
   .command("get-attachment")
