@@ -55,7 +55,7 @@ describe("CLI Commands", () => {
   it("should require SERVER_URL and SERVER_BEARER_TOKEN for API commands", async () => {
     const { output } = await runCommand(["list-projects"]);
     expect(output).toContain(
-      "SERVER_URL and SERVER_BEARER_TOKEN environment variables are required",
+      "Error: SERVER_URL must be provided either as environment variable or --server-url option",
     );
   });
 });
