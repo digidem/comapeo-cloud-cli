@@ -1,5 +1,7 @@
 # Comapeo Cloud CLI
 
+[![CI](https://github.com/digidem/comapeo-cloud-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/digidem/comapeo-cloud-cli/actions/workflows/ci.yml)
+
 A command-line interface for interacting with the Comapeo Cloud API.
 
 ## Installation
@@ -15,7 +17,10 @@ The CLI requires the following environment variables:
 - `SERVER_URL`: The URL of your Comapeo Cloud server
 - `SERVER_BEARER_TOKEN`: Your API bearer token
 
-You can set these in your environment or create a `.env` file:
+You can set these in your environment or create a `.env` file. For temporary overrides, use these command-line options with any command:
+
+- `-s, --server-url <url>` - Override server URL
+- `-t, --server-token <token>` - Override bearer token
 
 ```env
 SERVER_URL=https://yourserver.com
@@ -24,12 +29,20 @@ SERVER_BEARER_TOKEN=your-token
 
 ## Usage
 
-### Projects
+### Server Information
 
-Add a new project:
+Get server info:
 
 ```bash
-comapeo add-project \
+comapeo-cloud -s https://yourserver.com -t your-token server info
+```
+
+### Projects
+
+Add a new project (all hex keys are optional):
+
+```bash
+comapeo-cloud add-project \
   --name "Project Name" \
   --key "hex-encoded-project-key" \
   --auth-key "hex-encoded-auth-key" \
@@ -42,7 +55,7 @@ comapeo add-project \
 List all projects:
 
 ```bash
-comapeo list-projects
+comapeo-cloud list-projects
 ```
 
 ### Observations
@@ -50,18 +63,16 @@ comapeo list-projects
 Add a new observation:
 
 ```bash
-comapeo add-observation \
-  --project-id "project-id" \
+comapeo-cloud add-observation \
+  --project-id "proj_abc123" \
   --lat 12.345 \
-  --lon -67.890 \
-  --tags "tag1" "tag2" \
-  --attachments "driveId,photo,filename.jpg" "driveId,audio,recording.mp3"
+  --lon -67.890
 ```
 
 List observations for a project:
 
 ```bash
-comapeo list-observations --project-id "project-id"
+comapeo-cloud list-observations --project-id "proj_abc123"
 ```
 
 ### Attachments
@@ -69,12 +80,19 @@ comapeo list-observations --project-id "project-id"
 Get an attachment:
 
 ```bash
-comapeo get-attachment \
-  --project-id "project-id" \
-  --drive-id "drive-discovery-id" \
+comapeo-cloud get-attachment \
+  --project-id "proj_abc123" \
+  --drive-id "drive_123" \
   --type "photo" \
-  --name "filename" \
-  --variant "original"
+  --name "filename.jpg" \
+  --variant "preview"
+
+# For audio files:
+comapeo-cloud get-attachment \
+  --project-id "proj_abc123" \
+  --drive-id "drive_123" \
+  --type "audio" \
+  --name "recording.mp3"
 ```
 
 ### Remote Alerts
@@ -82,12 +100,12 @@ comapeo get-attachment \
 Create a remote detection alert:
 
 ```bash
-comapeo create-alert \
-  --project-id "project-id" \
+comapeo-cloud create-alert \
+  --project-id "proj_abc123" \
   --start-date "2024-01-01T00:00:00Z" \
   --end-date "2024-01-02T00:00:00Z" \
-  --source-id "source-id" \
-  --alert-type "alert-type" \
+  --source-id "src_123" \
+  --alert-type "motion-detected" \
   --lon -67.890 \
   --lat 12.345
 ```
@@ -97,7 +115,7 @@ comapeo create-alert \
 Check server health:
 
 ```bash
-comapeo healthcheck
+comapeo-cloud healthcheck
 ```
 
 ## Development
@@ -106,19 +124,27 @@ comapeo healthcheck
 2. Install dependencies:
 
 ```bash
-npm install
+bun install
 ```
 
 3. Build the project:
 
 ```bash
-npm run build
+bun run build
 ```
 
 4. Run tests:
 
 ```bash
-npm test
+bun test
+```
+
+## Configuration Overrides
+
+All commands support temporary server configuration via CLI flags:
+
+```bash
+comapeo-cloud -s https://alt.server.com -t alt-token [command]
 ```
 
 ## Publishing
