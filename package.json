@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "comapeo": "./dist/index.js"
+    "comapeo-cloud": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
