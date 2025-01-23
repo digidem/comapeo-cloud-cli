@@ -1,13 +1,10 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { config } from "dotenv";
-import axios, { AxiosError } from "axios";
-import chalk from "chalk";
 import { writeFile } from "node:fs/promises";
+import chalk from "chalk";
+import { validateEnv, getApiClient, handleError } from "./helpers.js";
 
-config();
-
-const program = new Command();
+export const program = new Command();
 
 interface ProjectOptions {
   name: string;
@@ -67,51 +64,6 @@ interface AlertOptions {
 interface ServerInfoOptions {
   serverUrl?: string;
   serverToken?: string;
-}
-
-// Helper function to validate environment variables
-function validateEnv(
-  serverUrl?: string,
-  serverToken?: string,
-): { SERVER_URL: string; SERVER_BEARER_TOKEN: string } {
-  const SERVER_URL = serverUrl || process.env.SERVER_URL;
-  const SERVER_BEARER_TOKEN = serverToken || process.env.SERVER_BEARER_TOKEN;
-
-  if (!SERVER_URL) {
-    console.error(
-      chalk.red(
-        "Error: SERVER_URL must be provided either as environment variable or --server-url option",
-      ),
-    );
-    process.exit(1);
-  }
-
-  if (!SERVER_BEARER_TOKEN) {
-    console.error(
-      chalk.red(
-        "Error: SERVER_BEARER_TOKEN must be provided either as environment variable or --server-token option",
-      ),
-    );
-    process.exit(1);
-  }
-
-  return { SERVER_URL, SERVER_BEARER_TOKEN };
-}
-
-// Helper function to get API client
-function getApiClient(options: { serverUrl?: string; serverToken?: string }) {
-  const { SERVER_URL, SERVER_BEARER_TOKEN } = validateEnv(
-    options.serverUrl,
-    options.serverToken,
-  );
-
-  return axios.create({
-    baseURL: SERVER_URL,
-    headers: {
-      Authorization: `Bearer ${SERVER_BEARER_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-  });
 }
 
 program
@@ -325,27 +277,15 @@ program
   .description("Check the health of the server")
   .action(async (options: { serverUrl?: string; serverToken?: string }) => {
     try {
-      const { SERVER_URL } = validateEnv(
-        options.serverUrl || program.opts().serverUrl,
-        options.serverToken || program.opts().serverToken,
-      );
-      const response = await axios.get(`${SERVER_URL}/healthcheck`);
+      const response = await getApiClient({
+        serverUrl: options.serverUrl || program.opts().serverUrl,
+        serverToken: options.serverToken || program.opts().serverToken,
+      }).get("/healthcheck");
       console.log(chalk.green("Server is healthy:"));
       console.log(JSON.stringify(response.data, null, 2));
     } catch (error) {
       handleError(error);
     }
   });
-
-function handleError(error: unknown) {
-  if (error instanceof AxiosError) {
-    console.error(chalk.red("API Error:"));
-    console.error(chalk.red(error.response?.data?.message || error.message));
-  } else {
-    console.error(chalk.red("An unexpected error occurred:"));
-    console.error(chalk.red(String(error)));
-  }
-  process.exit(1);
-}
 
 program.parse();
