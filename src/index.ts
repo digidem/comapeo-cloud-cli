@@ -8,39 +8,6 @@ import { validateEnv, getApiClient, handleError } from "./helpers.js";
 
 export const program = new Command();
 
-interface ProjectOptions {
-  name: string;
-  key: string;
-  authKey: string;
-  configKey: string;
-  dataKey: string;
-  blobIndexKey: string;
-  blobKey: string;
-  serverUrl?: string;
-  serverToken?: string;
-}
-
-interface ObservationOptions {
-  projectId: string;
-  lat: string;
-  lon: string;
-  tags?: string[];
-  attachments?: string[];
-  serverUrl?: string;
-  serverToken?: string;
-  metadata?: {
-    manualLocation: boolean;
-    position: {
-      mocked: boolean;
-      timestamp: string;
-      coords: {
-        latitude: number;
-        longitude: number;
-      };
-    };
-  };
-}
-
 interface AlertOptions {
   projectId: string;
   startDate: string;
@@ -114,45 +81,15 @@ program
   .description("Get server information")
   .action(async (options: ServerInfoOptions) => {
     try {
+      validateEnv(
+        options.serverUrl || program.opts().serverUrl,
+        options.serverToken || program.opts().serverToken,
+      );
       const response = await getApiClient({
         serverUrl: options.serverUrl || program.opts().serverUrl,
         serverToken: options.serverToken || program.opts().serverToken,
       }).get("/info");
       console.log(chalk.green("Server information:"));
-      console.log(JSON.stringify(response.data, null, 2));
-    } catch (error) {
-      handleError(error);
-    }
-  });
-
-// Add Project Command
-program
-  .command("add-project")
-  .description("Add a new project")
-  .requiredOption("--name <name>", "Project name")
-  .option("--key <key>", "Hex-encoded project key")
-  .option("--auth-key <key>", "Hex-encoded auth key")
-  .option("--config-key <key>", "Hex-encoded config key")
-  .option("--data-key <key>", "Hex-encoded data key")
-  .option("--blob-index-key <key>", "Hex-encoded blob index key")
-  .option("--blob-key <key>", "Hex-encoded blob key")
-  .action(async (options: ProjectOptions) => {
-    try {
-      const response = await getApiClient({
-        serverUrl: options.serverUrl || program.opts().serverUrl,
-        serverToken: options.serverToken || program.opts().serverToken,
-      }).put("/projects", {
-        projectName: options.name,
-        projectKey: options.key,
-        encryptionKeys: {
-          auth: options.authKey,
-          config: options.configKey,
-          data: options.dataKey,
-          blobIndex: options.blobIndexKey,
-          blob: options.blobKey,
-        },
-      });
-      console.log(chalk.green("Project added successfully:"));
       console.log(JSON.stringify(response.data, null, 2));
     } catch (error) {
       handleError(error);
@@ -165,43 +102,15 @@ program
   .description("List all projects")
   .action(async (options: { serverUrl?: string; serverToken?: string }) => {
     try {
+      validateEnv(
+        options.serverUrl || program.opts().serverUrl,
+        options.serverToken || program.opts().serverToken,
+      );
       const response = await getApiClient({
         serverUrl: options.serverUrl || program.opts().serverUrl,
         serverToken: options.serverToken || program.opts().serverToken,
       }).get("/projects");
       console.log(chalk.green("Projects:"));
-      console.log(JSON.stringify(response.data, null, 2));
-    } catch (error) {
-      handleError(error);
-    }
-  });
-
-// Add Observation Command
-program
-  .command("add-observation")
-  .description("Add a new observation to a project")
-  .requiredOption("-p, --project-id <id>", "Project public ID")
-  .requiredOption("--lat <latitude>", "Latitude")
-  .requiredOption("--lon <longitude>", "Longitude")
-  // .option('--tags <tags...>', 'Tags for the observation')
-  // .option('--attachments <items...>', 'Attachments in format: driveDiscoveryId,type,name', [])
-  .action(async (options: ObservationOptions) => {
-    try {
-      // const attachments = options.attachments?.map((attachment: string) => {
-      //   const [driveDiscoveryId, type, name] = attachment.split(',');
-      //   return { driveDiscoveryId, type, name };
-      // }) || [];
-
-      const response = await getApiClient({
-        serverUrl: options.serverUrl || program.opts().serverUrl,
-        serverToken: options.serverToken || program.opts().serverToken,
-      }).put(`/projects/${options.projectId}/observation`, {
-        lat: Number.parseFloat(options.lat),
-        lon: Number.parseFloat(options.lon),
-        // tags: options.tags || [],
-        // attachments
-      });
-      console.log(chalk.green("Observation added successfully:"));
       console.log(JSON.stringify(response.data, null, 2));
     } catch (error) {
       handleError(error);
@@ -220,6 +129,10 @@ program
       serverToken?: string;
     }) => {
       try {
+        validateEnv(
+          options.serverUrl || program.opts().serverUrl,
+          options.serverToken || program.opts().serverToken,
+        );
         const response = await getApiClient({
           serverUrl: options.serverUrl || program.opts().serverUrl,
           serverToken: options.serverToken || program.opts().serverToken,
@@ -246,6 +159,10 @@ program
       serverToken?: string;
     }) => {
       try {
+        validateEnv(
+          options.serverUrl || program.opts().serverUrl,
+          options.serverToken || program.opts().serverToken,
+        );
         interface ObservationData {
           docId: string;
           createdAt: string;
@@ -423,6 +340,10 @@ program
       serverToken?: string;
     }) => {
       try {
+        validateEnv(
+          options.serverUrl || program.opts().serverUrl,
+          options.serverToken || program.opts().serverToken,
+        );
         const { projectId, driveId, type, name } = getUrlComponents(
           options.url,
         );
@@ -460,6 +381,10 @@ program
   .requiredOption("--lat <latitude>", "Latitude")
   .action(async (options: AlertOptions) => {
     try {
+      validateEnv(
+        options.serverUrl || program.opts().serverUrl,
+        options.serverToken || program.opts().serverToken,
+      );
       const response = await getApiClient({
         serverUrl: options.serverUrl || program.opts().serverUrl,
         serverToken: options.serverToken || program.opts().serverToken,
@@ -497,6 +422,10 @@ program
       serverToken?: string;
     }) => {
       try {
+        validateEnv(
+          options.serverUrl || program.opts().serverUrl,
+          options.serverToken || program.opts().serverToken,
+        );
         const response = await getApiClient({
           serverUrl: options.serverUrl || program.opts().serverUrl,
           serverToken: options.serverToken || program.opts().serverToken,
@@ -515,6 +444,10 @@ program
   .description("Check the health of the server")
   .action(async (options: { serverUrl?: string; serverToken?: string }) => {
     try {
+      validateEnv(
+        options.serverUrl || program.opts().serverUrl,
+        options.serverToken || program.opts().serverToken,
+      );
       const response = await getApiClient({
         serverUrl: options.serverUrl || program.opts().serverUrl,
         serverToken: options.serverToken || program.opts().serverToken,

@@ -1,4 +1,3 @@
-import { Command } from "commander";
 import { AxiosError } from "axios";
 import chalk from "chalk";
 import { config } from "dotenv";

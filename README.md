@@ -34,45 +34,23 @@ SERVER_BEARER_TOKEN=your-token
 Get server info:
 
 ```bash
-comapeo-cloud -s https://yourserver.com -t your-token server info
+comapeo-cloud -s https://yourserver.com -t your-token info
 ```
 
 ### Projects
 
-Add a new project (all hex keys are optional):
-
-```bash
-comapeo-cloud add-project \
-  --name "Project Name" \
-  --key "hex-encoded-project-key" \
-  --auth-key "hex-encoded-auth-key" \
-  --config-key "hex-encoded-config-key" \
-  --data-key "hex-encoded-data-key" \
-  --blob-index-key "hex-encoded-blob-index-key" \
-  --blob-key "hex-encoded-blob-key"
-```
-
 List all projects:
 
 ```bash
-comapeo-cloud list-projects
+comapeo-cloud -s https://yourserver.com -t your-token list-projects
 ```
 
 ### Observations
 
-Add a new observation:
-
-```bash
-comapeo-cloud add-observation \
-  --project-id "proj_abc123" \
-  --lat 12.345 \
-  --lon -67.890
-```
-
 List observations for a project:
 
 ```bash
-comapeo-cloud list-observations --project-id "proj_abc123"
+comapeo-cloud -s https://yourserver.com -t your-token list-observations -p "proj_abc123"
 ```
 
 ### Attachments
@@ -80,15 +58,18 @@ comapeo-cloud list-observations --project-id "proj_abc123"
 Get an attachment:
 
 ```bash
-comapeo-cloud get-attachment \
-  --project-id "proj_abc123" \
+comapeo-cloud -s https://yourserver.com -t your-token get-attachment \
+  -p "proj_abc123" \
   --drive-id "drive_123" \
   --type "photo" \
   --name "filename.jpg" \
   --variant "preview"
+```
 
-# For audio files:
-comapeo-cloud get-attachment \
+For audio files:
+
+```bash
+comapeo-cloud -s https://yourserver.com -t your-token get-attachment \
   --project-id "proj_abc123" \
   --drive-id "drive_123" \
   --type "audio" \
@@ -100,7 +81,7 @@ comapeo-cloud get-attachment \
 Create a remote detection alert:
 
 ```bash
-comapeo-cloud create-alert \
+comapeo-cloud -s https://yourserver.com -t your-token create-alert \
   --project-id "proj_abc123" \
   --start-date "2024-01-01T00:00:00Z" \
   --end-date "2024-01-02T00:00:00Z" \
@@ -108,6 +89,22 @@ comapeo-cloud create-alert \
   --alert-type "motion-detected" \
   --lon -67.890 \
   --lat 12.345
+```
+
+List remote detection alerts for a project:
+
+```bash
+comapeo-cloud -s https://yourserver.com -t your-token list-alerts
+```
+
+### Data Export
+
+Export data from a project as a zip containing attachments and geojoson file:
+
+```bash
+comapeo-cloud -s https://yourserver.com -t your-token export-geojson \
+  -p "proj_abc123" \
+  -o "export.zip"
 ```
 
 ### Health Check
