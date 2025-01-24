@@ -485,6 +485,30 @@ program
     }
   });
 
+// List Alerts Command
+program
+  .command("list-alerts")
+  .description("List remote detection alerts for a project")
+  .requiredOption("-p, --project-id <id>", "Project public ID")
+  .action(
+    async (options: {
+      projectId: string;
+      serverUrl?: string;
+      serverToken?: string;
+    }) => {
+      try {
+        const response = await getApiClient({
+          serverUrl: options.serverUrl || program.opts().serverUrl,
+          serverToken: options.serverToken || program.opts().serverToken,
+        }).get(`/projects/${options.projectId}/remoteDetectionAlerts`);
+        console.log(chalk.green("Remote detection alerts:"));
+        console.log(JSON.stringify(response.data, null, 2));
+      } catch (error) {
+        handleError(error);
+      }
+    },
+  );
+
 // Healthcheck Command
 program
   .command("healthcheck")
