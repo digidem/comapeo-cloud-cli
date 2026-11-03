@@ -1,13 +1,24 @@
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const CLI_PATH = join(process.cwd(), "dist", "index.js");
+const PACKAGE_VERSION = (
+  JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
+    version: string;
+  }
+).version;
+
+interface RunResult {
+  code: number | null;
+  output: string;
+}
 
 describe("CLI Commands", () => {
   const runCommand = (
     args: string[] = [],
     includeEnv = false,
-  ): Promise<{ code: number | null; output: string }> => {
+  ): Promise<RunResult> => {
     return new Promise((resolve) => {
       const env = {
         ...process.env,
@@ -47,15 +58,86 @@ describe("CLI Commands", () => {
     expect(output).toContain("Options:");
   });
 
-  it("should show version number", async () => {
+  it("should show the version from package.json", async () => {
     const { output } = await runCommand(["--version"], true);
     expect(output).toMatch(/\d+\.\d+\.\d+/);
+    expect(output.trim()).toBe(PACKAGE_VERSION);
   });
 
-  it("should require SERVER_URL and SERVER_BEARER_TOKEN for API commands", async () => {
-    const { output } = await runCommand(["list-projects"]);
+  it("should require SERVER_URL for API commands", async () => {
+    const { output, code } = await runCommand(["list-projects"]);
     expect(output).toContain(
-      "Error: SERVER_URL must be provided either as environment variable or --server-url option",
+      "SERVER_URL must be provided as an environment variable or with --server-url",
     );
+    expect(code).toBe(2);
+  });
+
+  it("should advertise the filtering and counting flags", async () => {
+    const { output } = await runCommand(["list-observations", "--help"], true);
+    for (const flag of [
+      "--count",
+      "--group-by",
+      "--summary",
+      "--category",
+      "--tag",
+      "--since",
+      "--until",
+      "--bbox",
+      "--has",
+      "--missing",
+      "--include-deleted",
+      "--columns",
+    ]) {
+      expect(output).toContain(flag);
+    }
+  });
+
+  it("should reject an unknown output format", async () => {
+    const { output, code } = await runCommand(
+      ["list-projects", "--format", "yaml"],
+      true,
+    );
+    expect(output).toContain('Unknown --format "yaml"');
+    expect(code).toBe(2);
+  });
+
+  it("should require a project for list-observations", async () => {
+    const { output, code } = await runCommand(["list-observations"], true);
+    expect(output).toContain("A project is required");
+    expect(code).toBe(2);
+  });
+
+  it("should reject an unknown --group-by value before any request", async () => {
+    const { output, code } = await runCommand(
+      [
+        "list-observations",
+        "--project-id",
+        "x",
+        "--group-by",
+        "colour",
+        "--count",
+      ],
+      true,
+    );
+    expect(output).toContain('Unknown --group-by "colour"');
+    expect(code).toBe(2);
+  });
+
+  it("should reject an unknown column", async () => {
+    const { output, code } = await runCommand(
+      ["list-observations", "--project-id", "x", "--columns", "nope"],
+      true,
+    );
+    expect(output).toContain('Unknown column "nope"');
+    expect(code).toBe(2);
+  });
+
+  it("should reject a non-numeric --limit", async () => {
+    const { output, code } = await runCommand(
+      ["list-observations", "--project-id", "x", "--limit", "ten"],
+      true,
+    );
+    expect(output).toContain("--limit must be a non-negative integer");
+    expect(code).toBe(2);
   });
 });
