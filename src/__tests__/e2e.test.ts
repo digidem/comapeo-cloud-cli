@@ -161,6 +161,14 @@ describe("end to end against a stub server", () => {
     const lines = stdout.trim().split("\n");
     expect(lines[0]).toContain("category");
     expect(lines).toHaveLength(3); // header + 2 rows
+
+    // CSV has to be usable as data: the id must be the real 64-char docId
+    // and the timestamp the server's ISO value, not the table's abbreviations.
+    const cells = lines[1].split(",");
+    const id = cells[0];
+    const created = cells[lines[0].split(",").indexOf("created")];
+    expect(id).toHaveLength(64);
+    expect(created).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
   });
 
   it("groups counts as tab separated rows for table output", async () => {

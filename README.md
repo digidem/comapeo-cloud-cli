@@ -71,6 +71,13 @@ script with no extra flags. Override with `--format`:
 - `csv` — every column, untruncated; values are quoted only when they contain
   a comma, quote or newline, so what you read is what the server returned
 
+CSV is the lossless format: ids are the full 64-character `docId`, timestamps
+are the server's ISO values (not rounded to the second) and coordinates keep
+full precision, so distinct records cannot collapse into the same row. Missing
+values are empty cells rather than the table's `-` placeholder. The `media`
+column stays a readable summary (`3p`, `1p/1a`); use `photos`/`audio`, or
+`--format json`, when you need the raw attachment list.
+
 Other global flags: `--columns <a,b,c>` (per command), `--timeout <ms>`,
 `--no-color`, `-v/--verbose`, `-V/--version`.
 

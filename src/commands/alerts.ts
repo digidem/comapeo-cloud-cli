@@ -132,7 +132,11 @@ export function registerAlertCommands(program: Command): void {
 
         const page = paginate(matching, options);
 
-        write(renderList(context.format, columns, page.map(alertRow), page));
+        const rows = page.map((alert) =>
+          alertRow(alert, { full: context.format === "csv" }),
+        );
+
+        write(renderList(context.format, columns, rows, page));
       } catch (error) {
         handleError(error);
       }

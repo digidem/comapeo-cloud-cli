@@ -206,9 +206,13 @@ Examples:
         const sorted = sortObservations(matching, sortKey, options.reverse);
         const page = paginate(sorted, options);
 
-        write(
-          renderList(context.format, columns, page.map(observationRow), page),
+        // csv carries full ids/timestamps/coordinates; the table abbreviates
+        // them to keep columns narrow.
+        const rows = page.map((observation) =>
+          observationRow(observation, { full: context.format === "csv" }),
         );
+
+        write(renderList(context.format, columns, rows, page));
       } catch (error) {
         handleError(error);
       }

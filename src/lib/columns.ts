@@ -48,21 +48,61 @@ export const ALL_OBSERVATION_COLUMNS = OBSERVATION_COLUMNS.map(
   (column) => column.key,
 );
 
-export function observationRow(observation: Observation): Row {
+/** Render full values (csv) instead of terminal-shaped cells (table). */
+export interface RowDetail {
+  full?: boolean;
+}
+
+export function observationRow(
+  observation: Observation,
+  detail: RowDetail = {},
+): Row {
+  const full = detail.full === true;
   const media = countMedia(observation);
+  // Empty for csv, "-" for the table: "-" is a display placeholder that
+  // would otherwise be imported as a real value.
+  const cell = (value: unknown): string =>
+    full
+      ? value === undefined || value === null
+        ? ""
+        : String(value)
+      : dash(value);
+  const short = (value: string | undefined): string =>
+    full ? (value ?? "") : (value ?? "").replace("T", " ").slice(0, 19);
+
   return {
-    id: observation.docId.slice(0, 8),
-    created: (observation.createdAt ?? "").replace("T", " ").slice(0, 19),
-    updated: (observation.updatedAt ?? "").replace("T", " ").slice(0, 19),
-    category: dash(observation.tags?.categoryId),
-    notes: dash(observation.tags?.notes),
+    // csv gets the identifiers, timestamps and coordinates exactly as the
+    // server sent them; the table gets cells sized for a terminal.
+    id: full ? observation.docId : observation.docId.slice(0, 8),
+    created: short(observation.createdAt),
+    updated: short(observation.updatedAt),
+    category: cell(observation.tags?.categoryId),
+    notes: cell(observation.tags?.notes),
     media: mediaCell(observation),
     photos: media.photos,
     audio: media.audio,
-    lat: observation.lat === undefined ? "-" : observation.lat.toFixed(6),
-    lon: observation.lon === undefined ? "-" : observation.lon.toFixed(6),
-    preset: observation.presetRef?.docId.slice(0, 8) ?? "-",
-    device: observation.createdBy?.slice(0, 8) ?? "-",
+    lat:
+      observation.lat === undefined
+        ? full
+          ? ""
+          : "-"
+        : full
+          ? observation.lat
+          : observation.lat.toFixed(6),
+    lon:
+      observation.lon === undefined
+        ? full
+          ? ""
+          : "-"
+        : full
+          ? observation.lon
+          : observation.lon.toFixed(6),
+    preset: full
+      ? (observation.presetRef?.docId ?? "")
+      : (observation.presetRef?.docId.slice(0, 8) ?? "-"),
+    device: full
+      ? (observation.createdBy ?? "")
+      : (observation.createdBy?.slice(0, 8) ?? "-"),
     deleted: observation.deleted ? "yes" : "no",
   };
 }
@@ -86,16 +126,30 @@ export const ALERT_COLUMNS: Column[] = [
   { key: "lat", header: "lat", align: "right" },
 ];
 
-export function alertRow(alert: RemoteAlert): Row {
+export function alertRow(alert: RemoteAlert, detail: RowDetail = {}): Row {
+  const full = detail.full === true;
   const coordinates = alert.geometry?.coordinates ?? [];
+  const cell = (value: unknown): string =>
+    full
+      ? value === undefined || value === null
+        ? ""
+        : String(value)
+      : dash(value);
+  const time = (value: string | undefined): string =>
+    full ? (value ?? "") : (value ?? "").replace("T", " ").slice(0, 19);
+  const coordinate = (value: unknown): string | number => {
+    if (typeof value !== "number") return full ? "" : "-";
+    return full ? value : value.toFixed(6);
+  };
+
   return {
-    id: alert.docId.slice(0, 8),
-    start: (alert.detectionDateStart ?? "").replace("T", " ").slice(0, 19),
-    end: (alert.detectionDateEnd ?? "").replace("T", " ").slice(0, 19),
-    alertType: dash(alert.metadata?.alert_type),
-    sourceId: dash(alert.sourceId),
-    lon: typeof coordinates[0] === "number" ? coordinates[0].toFixed(6) : "-",
-    lat: typeof coordinates[1] === "number" ? coordinates[1].toFixed(6) : "-",
+    id: full ? alert.docId : alert.docId.slice(0, 8),
+    start: time(alert.detectionDateStart),
+    end: time(alert.detectionDateEnd),
+    alertType: cell(alert.metadata?.alert_type),
+    sourceId: cell(alert.sourceId),
+    lon: coordinate(coordinates[0]),
+    lat: coordinate(coordinates[1]),
   };
 }
 
