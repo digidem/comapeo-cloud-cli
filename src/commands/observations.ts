@@ -113,6 +113,24 @@ export function registerListObservationsCommand(program: Command): void {
     .option(
       "--columns <a,b,c>",
       `Columns for table/csv output (default: ${DEFAULT_OBSERVATION_COLUMNS.join(",")})`,
+    )
+    .addHelpText(
+      "after",
+      `
+All filters combine. Every filter runs client-side: the API returns the
+whole project in one response, so there is no server-side query to learn.
+
+Deleted observations are hidden by default (the API also returns
+tombstones). Add --include-deleted to see them.
+
+Examples:
+  $ comapeo-cloud list-observations -p <id> --count
+  $ comapeo-cloud list-observations -p <id> --count --group-by category
+  $ comapeo-cloud list-observations -p <id> --summary
+  $ comapeo-cloud list-observations -p <id> --tag tipo-de-corpo-dagua=rio --has audio
+  $ comapeo-cloud list-observations -p <id> --missing attachment --format csv
+  $ comapeo-cloud list-observations -p <id> --reverse --limit 20 --format table
+`,
     );
 
   addFilterOptions(command).action(
@@ -127,13 +145,19 @@ export function registerListObservationsCommand(program: Command): void {
           ? assertGroupKey(options.groupBy)
           : undefined;
         const sortKey = assertSortKey(options.sort ?? "createdAt");
-        const columns = selectColumns(
-          OBSERVATION_COLUMNS,
-          options.columns,
-          context.format === "csv"
-            ? ALL_OBSERVATION_COLUMNS
-            : DEFAULT_OBSERVATION_COLUMNS,
-        );
+        // Only validate columns when a list is actually rendered: --count
+        // and --summary ignore them, so a composed command should not fail
+        // on a column that would never be used.
+        const rendersColumns = !options.count && !options.summary;
+        const columns = rendersColumns
+          ? selectColumns(
+              OBSERVATION_COLUMNS,
+              options.columns,
+              context.format === "csv"
+                ? ALL_OBSERVATION_COLUMNS
+                : DEFAULT_OBSERVATION_COLUMNS,
+            )
+          : [];
         assertPagination(options);
 
         const projectId = await requireProjectId(

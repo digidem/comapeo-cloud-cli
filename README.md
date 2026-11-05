@@ -10,6 +10,24 @@ A command-line interface for interacting with the CoMapeo Cloud API.
 npm install -g comapeo-cloud-cli
 ```
 
+### Upgrading from 1.0.x
+
+1.1.0 changes what the list commands print, so check any script that consumed
+their stdout:
+
+- **Tombstones are hidden.** 1.0.x printed every document including deleted
+  ones. Pass `--include-deleted` to get the old, unfiltered set — or
+  `--only-deleted` to see just the tombstones.
+- **The output is records, not envelopes.** The `Observations:` / `Projects:`
+  headings and progress chatter are gone; stdout carries data and nothing else,
+  errors go to stderr.
+- **The default format depends on stdout.** A terminal gets a `table`, a pipe
+  gets `json`. Scripts that parsed 1.0.x's pretty-printed JSON keep working when
+  piped; add `--format json` (or `table`, `ndjson`, `csv`) to pin it.
+- **`export-geojson` follows the extension.** `.zip` always writes a real
+  archive now; `.geojson` writes GeoJSON alone, and `--no-attachments` no longer
+  changes the container.
+
 ## Configuration
 
 The CLI reads two environment variables:
@@ -50,7 +68,8 @@ script with no extra flags. Override with `--format`:
 - `table` — aligned columns, truncated long values
 - `json` — the full, untouched API records (default when piped)
 - `ndjson` — one JSON record per line, the friendliest target for `jq`
-- `csv` — every column, RFC 4180 quoting
+- `csv` — every column, untruncated; values are quoted only when they contain
+  a comma, quote or newline, so what you read is what the server returned
 
 Other global flags: `--columns <a,b,c>` (per command), `--timeout <ms>`,
 `--no-color`, `-v/--verbose`, `-V/--version`.
@@ -88,13 +107,18 @@ comapeo-cloud list-observations -p <id> --count --category agua       # 17
 comapeo-cloud list-observations -p <id> --count --has audio           # 21
 ```
 
-Break the number down with `--group-by` (tab-separated `key<TAB>count`):
+Break the number down with `--group-by`:
 
 ```bash
 comapeo-cloud list-observations -p <id> --count --group-by category
 comapeo-cloud list-observations -p <id> --count --group-by day
 comapeo-cloud list-observations -p <id> --count --group-by tag:tipo-de-corpo-dagua
 ```
+
+On a terminal this prints `key<TAB>count` rows, ready for `cut`/`sort`. Piped,
+the default format is `json`, so the same command emits a `{"agua": 3, ...}`
+object; pass `--format ndjson` for one `{"value": ..., "count": ...}` object per
+line, or `--format csv` for a `value,count` table.
 
 Valid groups: `category`, `preset`, `day`, `device`, `media`, `tag:<field>`.
 
@@ -117,9 +141,9 @@ categories       9
 ### Filtering
 
 All filtering happens client-side: the API's `/projects/:id/observations`
-endpoint takes no query parameters and always returns every document. That is
-cheap enough for field projects (well under a megabyte of JSON) and means every
-filter below can be combined freely.
+endpoint takes no query parameters and always returns every document. One round
+trip therefore serves any combination of the filters below; on large projects
+the transfer grows with the project, not with what you asked for.
 
 | Flag                                | Meaning                                                                    |
 | ----------------------------------- | -------------------------------------------------------------------------- |
@@ -201,11 +225,14 @@ plus `images/` and `audio/` folders; `.geojson` writes the GeoJSON alone and
 never downloads media. `--no-attachments` forces the metadata-only path.
 
 `export-geojson` accepts the same filter flags as `list-observations`, so
-whatever you can list you can also export.
+whatever you can list you can also export. It always exports the whole filtered
+set: `--limit`, `--offset`, `--sort` and `--reverse` are listing options and are
+not accepted here.
 
 Properties in the exported GeoJSON are the observation's tags (`categoryId`,
 `notes`, and any preset-specific field) plus `$created`, `$modified`, `$version`,
-`$photos` and, when present, `$audio`.
+`$photos`, `$audio` when present (an empty `audio/` folder is still created), and
+`$deleted` for tombstones.
 
 ## Health Check
 
@@ -216,24 +243,35 @@ comapeo-cloud info
 
 ## Exit Codes
 
-| Code | Meaning                                                        |
-| ---- | -------------------------------------------------------------- |
-| `0`  | success                                                        |
-| `1`  | API or runtime failure                                         |
-| `2`  | usage error (bad flag, missing config, ambiguous project name) |
-| `3`  | not found (unknown project, no matching records)               |
+| Code | Meaning                                                                  |
+| ---- | ------------------------------------------------------------------------ |
+| `0`  | success — including a list or count that matched nothing                 |
+| `1`  | API or runtime failure (network, bad response, unwritable file)          |
+| `2`  | usage error (bad flag or value, missing config, ambiguous project name)  |
+| `3`  | not found (unknown project, HTTP 404, or an export that matched nothing) |
+
+An empty result is not an error: `list-observations --count` on a filtered set
+with no matches prints `0` and exits `0`, which keeps shell conditionals honest.
+`export-geojson` is the exception — writing an empty archive would be a silent
+failure, so it exits `3` instead.
 
 ## Development
 
 ```bash
 bun install
 bun run build     # tsc -> dist/
-bun test          # unit + CLI integration tests
-bun run lint      # prettier
+bun test          # unit tests + end-to-end tests against a stub server
+bun run lint      # prettier --write, rewrites files in place
 ```
+
+Run `bun run build` before `bun test`: the end-to-end test spawns
+`dist/index.js`, so it exercises the compiled binary rather than the sources.
 
 `bun test` is what CI runs; `npm test` is wired to the same command because some
 dependencies (`chalk` 5) are ESM-only and do not load under jest's CJS runtime.
+
+The test fixture is synthetic. Real project exports carry field observations
+from participant communities, so none are committed here.
 
 ### Layout
 
@@ -246,7 +284,8 @@ src/lib/filters.ts  pure filter predicates (no I/O)
 src/lib/group.ts    grouping and summary maths
 src/lib/format.ts   table / json / ndjson / csv renderers
 src/lib/columns.ts  column definitions per data type
-src/__tests__/      unit tests + a synthetic fixture (no real field data)
+src/__tests__/      unit tests, a stub-server end-to-end test, and a synthetic
+                    fixture (no real field data)
 ```
 
 ## Publishing

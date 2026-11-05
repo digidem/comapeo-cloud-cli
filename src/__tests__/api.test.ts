@@ -3,6 +3,7 @@ import {
   describeError,
   isProjectId,
   matchProjects,
+  resolveProjectId,
   resolveServerConfig,
 } from "../lib/api.js";
 import { CliError, EXIT } from "../lib/errors.js";
@@ -117,6 +118,41 @@ describe("resolveServerConfig", () => {
         timeout: "soon",
       }),
     ).toThrow(/--timeout/);
+  });
+
+  it("rejects a timeout with trailing units or exponent notation", () => {
+    const base = { serverUrl: "https://x.test", serverToken: "t" };
+    expect(() => resolveServerConfig({ ...base, timeout: "30000ms" })).toThrow(
+      /--timeout/,
+    );
+    expect(() => resolveServerConfig({ ...base, timeout: "1e3" })).toThrow(
+      /--timeout/,
+    );
+    expect(resolveServerConfig({ ...base, timeout: "1500" }).timeoutMs).toBe(
+      1500,
+    );
+  });
+});
+
+describe("resolveProjectId", () => {
+  // The client is only reached for name lookups; empty input must fail
+  // before any request, so a stub that throws proves it.
+  const explodingClient = {
+    get: () => {
+      throw new Error("network should not be reached");
+    },
+  } as never;
+
+  it("refuses an empty project instead of substring-matching everything", async () => {
+    await expect(resolveProjectId(explodingClient, "   ")).rejects.toThrow(
+      /Refusing an empty project/,
+    );
+  });
+
+  it("passes a 52-char id through without a round trip", async () => {
+    await expect(resolveProjectId(explodingClient, REAL_ID)).resolves.toBe(
+      REAL_ID,
+    );
   });
 });
 

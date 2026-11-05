@@ -21,9 +21,27 @@ export function registerListProjectsCommand(program: Command): void {
       "--columns <a,b,c>",
       "Columns for table/csv output (projectId,name)",
     )
+    .addHelpText(
+      "after",
+      `
+Pass either the projectId shown here or a project name to -p on the other
+commands; a name must match exactly one project.
+
+Examples:
+  $ comapeo-cloud list-projects
+  $ comapeo-cloud list-projects --count
+  $ comapeo-cloud list-projects --search vigilancia
+`,
+    )
     .action(async (options: ListProjectsOptions, cmd: Command) => {
       try {
         const context = createContext(cmd);
+        const columns = selectColumns(
+          PROJECT_COLUMNS,
+          options.columns,
+          PROJECT_COLUMNS.map((column) => column.key),
+        );
+
         const response =
           await context.client.get<ApiList<Project>>("/projects");
         const all = response.data?.data ?? [];
@@ -37,12 +55,6 @@ export function registerListProjectsCommand(program: Command): void {
           write(renderCount(projects.length, undefined, context.format));
           return;
         }
-
-        const columns = selectColumns(
-          PROJECT_COLUMNS,
-          options.columns,
-          PROJECT_COLUMNS.map((column) => column.key),
-        );
 
         write(
           renderList(

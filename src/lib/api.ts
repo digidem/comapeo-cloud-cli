@@ -73,10 +73,21 @@ export function resolveServerConfig(options: ServerOptionInput): ServerConfig {
     );
   }
 
+  // Reject anything that is not a plain integer: parseInt("1e3") is 1 and
+  // parseInt("30000ms") is 30000, both of which silently change behaviour.
+  const rawTimeout =
+    options.timeout === undefined ? undefined : String(options.timeout).trim();
+  if (rawTimeout !== undefined && !/^\d+$/.test(rawTimeout)) {
+    throw new CliError(
+      `--timeout must be a positive integer number of milliseconds, got "${options.timeout}".`,
+      EXIT.USAGE,
+    );
+  }
+
   const timeoutMs =
-    options.timeout === undefined
+    rawTimeout === undefined
       ? DEFAULT_TIMEOUT_MS
-      : Number.parseInt(String(options.timeout), 10);
+      : Number.parseInt(rawTimeout, 10);
 
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new CliError(
@@ -141,6 +152,14 @@ export async function resolveProjectId(
   input: string,
 ): Promise<string> {
   const value = input.trim();
+  if (value === "") {
+    // An empty needle substring-matches every project, which on a
+    // single-project server would silently pick that project.
+    throw new CliError(
+      "Refusing an empty project: pass -p/--project-id <id|name> or set COMAPEO_PROJECT.",
+      EXIT.USAGE,
+    );
+  }
   if (isProjectId(value)) return value;
 
   const response = await client.get<ApiList<Project>>("/projects");
@@ -169,7 +188,7 @@ export async function requireProjectId(
   fromFlag?: string,
 ): Promise<string> {
   const input = fromFlag ?? pickEnv("COMAPEO_PROJECT");
-  if (!input) {
+  if (!input || input.trim() === "") {
     throw new CliError(
       "A project is required: pass -p/--project-id <id|name>, or set COMAPEO_PROJECT.",
       EXIT.USAGE,

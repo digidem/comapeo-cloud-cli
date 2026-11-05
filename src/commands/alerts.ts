@@ -6,7 +6,7 @@ import { CliError, EXIT } from "../lib/errors.js";
 import { parseDateBound } from "../lib/filters.js";
 import { renderCount, renderList, write } from "../lib/format.js";
 import type { ApiList, RemoteAlert } from "../lib/types.js";
-import { collect, paginate } from "./shared.js";
+import { collect, assertPagination, paginate } from "./shared.js";
 
 interface ListAlertsOptions {
   projectId?: string;
@@ -33,8 +33,10 @@ interface CreateAlertOptions {
 }
 
 const parseCoordinate = (value: string, name: string, limit: number) => {
-  const parsed = Number.parseFloat(value);
-  if (!Number.isFinite(parsed) || Math.abs(parsed) > limit) {
+  // Number() rejects "12garbage" and "1,5"; parseFloat would accept both.
+  const trimmed = value.trim();
+  const parsed = Number(trimmed);
+  if (trimmed === "" || !Number.isFinite(parsed) || Math.abs(parsed) > limit) {
     throw new CliError(
       `--${name} must be a number between -${limit} and ${limit}, got "${value}".`,
       EXIT.USAGE,
@@ -58,9 +60,8 @@ export function registerAlertCommands(program: Command): void {
       "--alert-type <type>",
       "Filter by metadata.alert_type (repeatable)",
       collect,
-      [],
     )
-    .option("--source-id <id>", "Filter by source id (repeatable)", collect, [])
+    .option("--source-id <id>", "Filter by source id (repeatable)", collect)
     .option("--include-deleted", "Include deleted alerts")
     .option("--only-deleted", "Show only deleted alerts")
     .option("--limit <n>", "Print at most n alerts")
@@ -69,16 +70,9 @@ export function registerAlertCommands(program: Command): void {
     .action(async (options: ListAlertsOptions, cmd: Command) => {
       try {
         const context = createContext(cmd);
-        const projectId = await requireProjectId(
-          context.client,
-          options.projectId,
-        );
 
-        const response = await context.client.get<ApiList<RemoteAlert>>(
-          `/projects/${projectId}/remoteDetectionAlerts`,
-        );
-        const all = response.data?.data ?? [];
-
+        // Validate flags (and build the column set) before the request so
+        // a typo is a usage error rather than a connection failure.
         const since = options.since
           ? parseDateBound(options.since, "start")
           : undefined;
@@ -89,6 +83,22 @@ export function registerAlertCommands(program: Command): void {
           (options.alertType ?? []).map((value) => value.toLowerCase()),
         );
         const sourceIds = new Set(options.sourceId ?? []);
+        const columns = selectColumns(
+          ALERT_COLUMNS,
+          options.columns,
+          ALERT_COLUMNS.map((column) => column.key),
+        );
+        assertPagination(options);
+
+        const projectId = await requireProjectId(
+          context.client,
+          options.projectId,
+        );
+
+        const response = await context.client.get<ApiList<RemoteAlert>>(
+          `/projects/${projectId}/remoteDetectionAlerts`,
+        );
+        const all = response.data?.data ?? [];
 
         const matching = all.filter((alert) => {
           if (options.onlyDeleted) {
@@ -121,11 +131,6 @@ export function registerAlertCommands(program: Command): void {
         }
 
         const page = paginate(matching, options);
-        const columns = selectColumns(
-          ALERT_COLUMNS,
-          options.columns,
-          ALERT_COLUMNS.map((column) => column.key),
-        );
 
         write(renderList(context.format, columns, page.map(alertRow), page));
       } catch (error) {
@@ -146,6 +151,19 @@ export function registerAlertCommands(program: Command): void {
     .requiredOption("--alert-type <type>", "Alert type")
     .requiredOption("--lon <longitude>", "Longitude")
     .requiredOption("--lat <latitude>", "Latitude")
+    .addHelpText(
+      "after",
+      `
+This is the only write command in the CLI; everything else is read-only.
+Dates are ISO timestamps, coordinates are decimal degrees.
+
+Example:
+  $ comapeo-cloud create-alert -p <id> \\
+      --start-date 2026-01-01T00:00:00Z --end-date 2026-01-02T00:00:00Z \\
+      --source-id src_123 --alert-type motion-detected \\
+      --lon -67.890 --lat 12.345
+`,
+    )
     .action(async (options: CreateAlertOptions, cmd: Command) => {
       try {
         const context = createContext(cmd);
@@ -169,8 +187,11 @@ export function registerAlertCommands(program: Command): void {
         const response = await context.client.post(
           `/projects/${projectId}/remoteDetectionAlerts`,
           {
-            detectionDateStart: options.startDate,
-            detectionDateEnd: options.endDate,
+            // Forward normalised ISO timestamps, not the raw input: the
+            // server is promised ISO, and a date-only value would
+            // otherwise be sent as "2026-01-01".
+            detectionDateStart: new Date(start).toISOString(),
+            detectionDateEnd: new Date(end).toISOString(),
             sourceId: options.sourceId,
             metadata: { alert_type: options.alertType },
             geometry: { type: "Point", coordinates: [lon, lat] },

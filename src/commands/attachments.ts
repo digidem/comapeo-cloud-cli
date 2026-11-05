@@ -42,6 +42,17 @@ export function registerGetAttachmentCommand(program: Command): void {
       "Photo variant: original|preview|thumbnail (audio only supports original)",
     )
     .option("-o, --output <file>", 'Output filename, or "-" for stdout')
+    .addHelpText(
+      "after",
+      `
+Attachment URLs come from list-observations (attachments[].url). Photos get
+a .jpg extension, audio a .mp3.
+
+Examples:
+  $ comapeo-cloud get-attachment -u <attachmentUrl> --variant thumbnail -o photo.jpg
+  $ comapeo-cloud get-attachment -u <attachmentUrl> -o - | file -
+`,
+    )
     .action(async (options: GetAttachmentOptions, cmd: Command) => {
       try {
         const context = createContext(cmd);

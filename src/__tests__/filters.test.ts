@@ -77,6 +77,17 @@ describe("parseBbox / parseTagExpression", () => {
     expect(() => parseBbox("-57.4,-1.5")).toThrow(/west,south,east,north/);
   });
 
+  it("rejects trailing garbage instead of parseFloat-style truncation", () => {
+    expect(() => parseBbox("-57.4junk,-1.5,-57.1,-1.0")).toThrow(
+      /west,south,east,north/,
+    );
+  });
+
+  it("rejects inverted bounds", () => {
+    expect(() => parseBbox("-57.1,-1.5,-57.4,-1.0")).toThrow(/inverted/);
+    expect(() => parseBbox("-57.4,-1.0,-57.1,-1.5")).toThrow(/inverted/);
+  });
+
   it("parses key=value and OR lists", () => {
     expect(parseTagExpression("tipo=rio|igarape")).toEqual({
       key: "tipo",
@@ -216,6 +227,26 @@ describe("sortObservations", () => {
     expect(
       ids(sortObservations(observations, "createdAt", true)).slice(0, 2),
     ).toEqual(["1f", "1e"]);
+  });
+
+  it("sorts on epoch time, so differing ISO offsets stay chronological", () => {
+    const withOffsets = [
+      {
+        ...observations[0],
+        docId: "late-utc",
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+      {
+        ...observations[0],
+        docId: "early-local",
+        createdAt: "2026-01-01T01:00:00+02:00",
+      },
+    ];
+    // "01:00+02:00" is 23:00Z on Dec 31, i.e. earlier than "00:00Z".
+    expect(ids(sortObservations(withOffsets, "createdAt"))).toEqual([
+      "ea",
+      "la",
+    ]);
   });
 
   it("sorts media-rich observations last when sorting by media", () => {

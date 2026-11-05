@@ -38,11 +38,14 @@ const truncate = (value: string, maxWidth?: number): string => {
   return `${value.slice(0, maxWidth - 1)}…`;
 };
 
-const cellText = (row: Row, column: Column): string => {
+const rawText = (row: Row, column: Column): string => {
   const raw = row[column.key];
   if (raw === undefined || raw === null) return "";
-  return truncate(String(raw), column.maxWidth);
+  return String(raw);
 };
+
+const cellText = (row: Row, column: Column): string =>
+  truncate(rawText(row, column), column.maxWidth);
 
 const pad = (value: string, width: number, align: "left" | "right"): string =>
   align === "right" ? value.padStart(width) : value.padEnd(width);
@@ -75,13 +78,16 @@ export function renderTable(columns: Column[], rows: Row[]): string {
 }
 
 const csvEscape = (value: string): string =>
-  /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 
 export function renderCsv(columns: Column[], rows: Row[]): string {
+  // CSV is a data format, so it never truncates: maxWidth is a table-only
+  // affordance. Quoting covers CR as well as LF, otherwise a bare CR is
+  // read back as a record separator.
   const lines = [columns.map((column) => csvEscape(column.header)).join(",")];
   for (const row of rows) {
     lines.push(
-      columns.map((column) => csvEscape(cellText(row, column))).join(","),
+      columns.map((column) => csvEscape(rawText(row, column))).join(","),
     );
   }
   return lines.join("\n");
@@ -115,7 +121,11 @@ export function renderList<T>(
 /**
  * `--count` output: a bare number with no decoration, because the whole
  * point is `$(comapeo-cloud ... --count)` inside a script.
- * Grouped counts are tab-separated so `| column -t` still works.
+ *
+ * Grouped counts are tab-separated for `table` so `| column -t` works.
+ * Note the format is resolved by output mode: piped output defaults to
+ * JSON, where grouped counts become an object — pass `--format table`
+ * when composing TSV in a pipeline.
  */
 export function renderCount(
   total: number,
@@ -126,6 +136,11 @@ export function renderCount(
 
   if (format === "json") {
     return JSON.stringify(Object.fromEntries(counts), null, 2);
+  }
+  if (format === "ndjson") {
+    return counts
+      .map(([key, n]) => JSON.stringify({ value: key, count: n }))
+      .join("\n");
   }
   if (format === "csv") {
     return [

@@ -32,13 +32,11 @@ export function addFilterOptions(command: Command): Command {
       "--category <id[,id]>",
       "Filter by tags.categoryId (repeatable, comma separated)",
       collect,
-      [],
     )
     .option(
       "--tag <key=value>",
       "Filter by any tag; repeatable, use v1|v2 for OR",
       collect,
-      [],
     )
     .option("--preset <docId>", "Filter by preset docId prefix")
     .option(
@@ -54,13 +52,11 @@ export function addFilterOptions(command: Command): Command {
       "--has <kind>",
       "Only with photo|audio|video|attachment|location|notes|preset (repeatable)",
       collect,
-      [],
     )
     .option(
       "--missing <kind>",
       "Only without photo|audio|video|attachment|location|notes|preset (repeatable)",
       collect,
-      [],
     )
     .option("--search <text>", "Substring match over notes and tag values")
     .option("--include-deleted", "Include deleted (tombstoned) documents")
@@ -93,8 +89,8 @@ export function assertPagination(options: {
     ["offset", options.offset],
   ] as const) {
     if (raw === undefined) continue;
-    const parsed = Number.parseInt(raw, 10);
-    if (!Number.isFinite(parsed) || parsed < 0 || `${parsed}` !== raw.trim()) {
+    // "05" is a fine non-negative integer; "ten", "-1" and "1.5" are not.
+    if (!/^\d+$/.test(raw.trim())) {
       throw new CliError(
         `--${name} must be a non-negative integer, got "${raw}".`,
         EXIT.USAGE,

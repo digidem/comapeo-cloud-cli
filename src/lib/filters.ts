@@ -87,14 +87,25 @@ export interface BoundingBox {
 
 /** Parse `west,south,east,north` (the GeoJSON / Overpass bbox order). */
 export function parseBbox(value: string): BoundingBox {
-  const parts = value.split(",").map((part) => Number.parseFloat(part.trim()));
-  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
+  const parts = value.split(",").map((part) => part.trim());
+  // Number() rather than parseFloat(): parseFloat("10junk") is 10, which
+  // would silently accept a typo'd box.
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => part === "" || !Number.isFinite(Number(part)))
+  ) {
     throw new CliError(
       `--bbox expects "west,south,east,north" in degrees, got "${value}".`,
       EXIT.USAGE,
     );
   }
-  const [west, south, east, north] = parts;
+  const [west, south, east, north] = parts.map(Number);
+  if (west > east || south > north) {
+    throw new CliError(
+      `--bbox bounds are inverted: expected west<=east and south<=north, got "${value}". Antimeridian-crossing boxes are not supported.`,
+      EXIT.USAGE,
+    );
+  }
   return { west, south, east, north };
 }
 
@@ -303,12 +314,23 @@ export type SortKey =
   | "media"
   | "id";
 
+/**
+ * Sort on epoch milliseconds, not on the raw string: ISO timestamps with
+ * different offsets (`...T01:00:00+02:00` vs `...T00:00:00Z`) sort
+ * chronologically wrong as strings. Zero-padded so the numeric compare
+ * still works when these are used as strings.
+ */
+const epochKey = (value: string | undefined): string => {
+  const parsed = value ? Date.parse(value) : Number.NaN;
+  return Number.isNaN(parsed) ? "" : String(parsed).padStart(15, "0");
+};
+
 const sortValue = (observation: Observation, key: SortKey): string => {
   switch (key) {
     case "createdAt":
-      return observation.createdAt ?? "";
+      return epochKey(observation.createdAt);
     case "updatedAt":
-      return observation.updatedAt ?? "";
+      return epochKey(observation.updatedAt);
     case "category":
       return String(observation.tags?.categoryId ?? "");
     case "notes":
@@ -327,10 +349,13 @@ export function sortObservations(
   key: SortKey,
   reverse = false,
 ): Observation[] {
-  const sorted = [...observations].sort((a, b) =>
-    sortValue(a, key).localeCompare(sortValue(b, key)),
+  const direction = reverse ? -1 : 1;
+  // Negate the comparison instead of reversing the result: reverse()
+  // would also flip the order of equal keys, making `--reverse`
+  // inconsistent with a plain sort.
+  return [...observations].sort(
+    (a, b) => direction * sortValue(a, key).localeCompare(sortValue(b, key)),
   );
-  return reverse ? sorted.reverse() : sorted;
 }
 
 export function filterObservations(

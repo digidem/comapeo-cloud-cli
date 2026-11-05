@@ -83,6 +83,24 @@ describe("renderCsv", () => {
     );
     expect(output).toBe('notes\n"a,b""c"');
   });
+
+  it("quotes carriage returns so they cannot split records", () => {
+    const output = renderCsv(
+      [{ key: "notes", header: "notes" }],
+      [{ notes: "a\rb" }],
+    );
+    expect(output).toBe('notes\n"a\rb"');
+  });
+
+  it("never truncates, even when the column declares a maxWidth", () => {
+    const long = "x".repeat(80);
+    const output = renderCsv(
+      [{ key: "notes", header: "notes", maxWidth: 6 }],
+      [{ notes: long }],
+    );
+    expect(output).toContain(long);
+    expect(output).not.toContain("…");
+  });
 });
 
 describe("renderList", () => {
@@ -132,6 +150,23 @@ describe("renderCount", () => {
 
   it("prints csv for csv", () => {
     expect(renderCount(5, [["agua", 3]], "csv")).toBe("value,count\nagua,3");
+  });
+
+  it("prints parseable records for ndjson, never TSV", () => {
+    const lines = renderCount(
+      5,
+      [
+        ["agua", 3],
+        ["coleta", 2],
+      ],
+      "ndjson",
+    )
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(lines).toEqual([
+      { value: "agua", count: 3 },
+      { value: "coleta", count: 2 },
+    ]);
   });
 });
 

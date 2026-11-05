@@ -22,6 +22,11 @@ describe("CLI Commands", () => {
     return new Promise((resolve) => {
       const env = {
         ...process.env,
+        // A developer's own COMAPEO_* defaults would otherwise satisfy
+        // the "project required" case or point at a real server.
+        COMAPEO_PROJECT: "",
+        COMAPEO_SERVER_URL: "",
+        COMAPEO_SERVER_TOKEN: "",
         ...(includeEnv
           ? {
               SERVER_URL: "http://localhost:3000",
