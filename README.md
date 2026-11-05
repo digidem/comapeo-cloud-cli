@@ -297,11 +297,24 @@ src/__tests__/      unit tests, a stub-server end-to-end test, and a synthetic
 
 ## Publishing
 
-The package is published to npm when a release is created on GitHub:
+The published name is `@luandro/comapeo-cloud-cli`; the binary is still
+`comapeo-cloud`. Pushing to `main` publishes whatever `version` is in
+`package.json` via `.github/workflows/publish.yml`, which only uploads when
+that version is not on npm yet. So the release sequence is:
 
-1. Update `version` in `package.json`
-2. Create and push a tag
-3. Create a GitHub release
+1. Bump `version` in `package.json`
+2. Merge (or push) to `main`
+3. Watch the `Publish` workflow; `npm view @luandro/comapeo-cloud-cli version`
+   should report the new version
+
+The workflow authenticates with the `NPM_TOKEN` repo secret (granular token,
+`Read and write (publish and stage)` on `@luandro/comapeo-cloud-cli`, 2FA
+bypass ticked). Without the bypass, publishing fails with a 403; an unscoped
+name the account cannot publish under fails with a 404.
+
+> The unscoped `comapeo-cloud-cli` on npm (1.0.3 and earlier) is from before
+> this rename. `npm install -g comapeo-cloud-cli` will still hand you 1.0.3,
+> so use the scoped name.
 
 ## License
 
