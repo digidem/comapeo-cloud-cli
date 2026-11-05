@@ -235,4 +235,26 @@ describe("end to end against a stub server", () => {
     expect(code).toBe(0);
     expect(stdout.trim()).toBe("ok");
   });
+
+  it("exits quietly when the reader closes the pipe early", async () => {
+    // `comapeo-cloud list-observations | head -1` must not print an EPIPE
+    // stack trace over the output. Closing the read end before the child
+    // writes makes the failure deterministic instead of a race.
+    const result = await new Promise<{ code: number | null; stderr: string }>(
+      (resolve) => {
+        const child = spawn("node", [CLI_PATH, "--help"], {
+          env: { ...process.env, NO_COLOR: "1" },
+        });
+        let stderr = "";
+        child.stderr.on("data", (chunk) => {
+          stderr += chunk.toString();
+        });
+        child.stdout.destroy();
+        child.on("close", (code) => resolve({ code, stderr }));
+      },
+    );
+
+    expect(result.stderr).not.toContain("EPIPE");
+    expect(result.code).toBe(0);
+  });
 });

@@ -5,6 +5,17 @@ import { EXIT } from "./lib/errors.js";
 
 export const program = buildProgram();
 
+// `comapeo-cloud --help | head -5` makes Node throw EPIPE when the reader
+// closes early, and the default handler prints a stack trace over the output
+// the user actually asked for. A CLI that prints data has to survive its
+// reader leaving, so treat EPIPE as a normal end of output.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EPIPE") process.exit(EXIT.OK);
+    throw error;
+  });
+}
+
 // exitOverride() stops Commander from calling process.exit() itself, which
 // both avoids truncating piped output and lets usage errors exit with the
 // documented code 2 instead of Commander's default 1. It must be applied to
