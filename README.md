@@ -7,7 +7,7 @@ A command-line interface for interacting with the CoMapeo Cloud API.
 ## Installation
 
 ```bash
-npm install -g comapeo-cloud-cli
+npm install -g @luandro/comapeo-cloud-cli
 ```
 
 ### Upgrading from 1.0.x
